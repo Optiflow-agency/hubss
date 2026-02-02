@@ -1,0 +1,10 @@
+
+{
+  "name": "Hubss - Unified Collaboration Platform",
+  "description": "An all-in-one platform integrating real-time communication, project management, and documentation. Features Kanban boards, team chat with AI assistance, and interactive dashboards.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}
