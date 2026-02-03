@@ -25,13 +25,7 @@ interface AuthProps {
 
 type AuthView = 'login' | 'register_step_1' | 'onboarding_workspace' | 'onboarding_role' | 'onboarding_function' | 'onboarding_project' | 'onboarding_tasks' | 'onboarding_sections' | 'onboarding_invite' | 'onboarding_avatar';
 
-// UI Color Mapping for Editor Buttons (Visual only)
-const SKIN_COLORS_HEX: Record<string, string> = {
-    pale: '#ffdbb4', light: '#edb98a', tanned: '#fd9841', yellow: '#f8d25c', brown: '#d08b5b', darkBrown: '#ae5d29', black: '#614335'
-};
-const HAIR_COLORS_HEX: Record<string, string> = {
-    black: '#2c1b18', brownDark: '#4a312c', brown: '#724133', red: '#a55728', blonde: '#b58143', blondeGolden: '#d6b370', platinum: '#e8e1e1', pastelPink: '#ffb6b6', silverGray: '#e8e1e1', aurora: '#40e0d0'
-};
+// Colors are now HEX values directly in AVATAR_CONSTANTS
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [view, setView] = useState<AuthView>('login');
@@ -92,7 +86,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       const safeDefault = getSafeAvatarConfig({ 
           ...avatarConfig, 
           gender: newGender,
-          top: newGender === 'woman' ? 'longHairStraight' : 'shortHairShortFlat',
+          top: newGender === 'woman' ? 'straight01' : 'shortFlat',
           facialHair: 'none'
       });
       setAvatarConfig(safeDefault);
@@ -123,7 +117,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     e.preventDefault();
     setIsLoading(true);
     setTimeout(() => {
-      const mockConfig = getSafeAvatarConfig({ seed: 'Felix', top: 'shortHairShortFlat' });
+      const mockConfig = getSafeAvatarConfig({ seed: 'Felix', top: 'shortFlat' });
       const mockUser: User = {
         id: 'u1', name: 'Alessandro M.', email: email,
         avatar: generateAvatarUrl(mockConfig),
@@ -352,7 +346,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                             key={c} 
                                             onClick={() => setAvatarConfig({...avatarConfig, skinColor: c})} 
                                             className={`w-12 h-12 rounded-full shadow-sm ring-2 ring-offset-2 dark:ring-offset-slate-900 transition-all ${avatarConfig.skinColor === c ? 'ring-indigo-500 scale-110' : 'ring-transparent hover:scale-105'}`} 
-                                            style={{ backgroundColor: SKIN_COLORS_HEX[c] || '#ccc' }} 
+                                            style={{ backgroundColor: `#${c}` }} 
                                           />
                                       ))}
                                   </div>
@@ -398,7 +392,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                                             key={c} 
                                             onClick={() => setAvatarConfig({...avatarConfig, hairColor: c})} 
                                             className={`w-12 h-12 rounded-full shadow-sm ring-2 ring-offset-2 dark:ring-offset-slate-900 transition-all ${avatarConfig.hairColor === c ? 'ring-indigo-500 scale-110' : 'ring-transparent hover:scale-105'}`} 
-                                            style={{ backgroundColor: HAIR_COLORS_HEX[c] || '#ccc' }} 
+                                            style={{ backgroundColor: `#${c}` }} 
                                           />
                                       ))}
                                   </div>
