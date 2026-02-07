@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase, signIn, signUp, signOut, signInWithOAuth, getCurrentUser } from '../../lib/supabase';
+import { supabase, signIn, signUp, signOut, signInWithOAuth } from '../../lib/supabase';
 
 interface AuthState {
   user: User | null;
@@ -73,17 +73,23 @@ export function useAuth(): UseAuthReturn {
   const handleSignIn = useCallback(async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
-    const { data, error } = await signIn(email, password);
+    try {
+      const { data, error } = await signIn(email, password);
 
-    setState(prev => ({
-      ...prev,
-      user: data.user,
-      session: data.session,
-      loading: false,
-      error: error as AuthError | null,
-    }));
+      setState(prev => ({
+        ...prev,
+        user: data?.user ?? null,
+        session: data?.session ?? null,
+        loading: false,
+        error: error as AuthError | null,
+      }));
 
-    return { user: data.user, error: error as AuthError | null };
+      return { user: data?.user ?? null, error: error as AuthError | null };
+    } catch (err) {
+      const authError = err as AuthError;
+      setState(prev => ({ ...prev, loading: false, error: authError }));
+      return { user: null, error: authError };
+    }
   }, []);
 
   const handleSignUp = useCallback(async (
@@ -93,17 +99,23 @@ export function useAuth(): UseAuthReturn {
   ) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
 
-    const { data, error } = await signUp(email, password, metadata);
+    try {
+      const { data, error } = await signUp(email, password, metadata);
 
-    setState(prev => ({
-      ...prev,
-      user: data.user,
-      session: data.session,
-      loading: false,
-      error: error as AuthError | null,
-    }));
+      setState(prev => ({
+        ...prev,
+        user: data?.user ?? null,
+        session: data?.session ?? null,
+        loading: false,
+        error: error as AuthError | null,
+      }));
 
-    return { user: data.user, error: error as AuthError | null };
+      return { user: data?.user ?? null, error: error as AuthError | null };
+    } catch (err) {
+      const authError = err as AuthError;
+      setState(prev => ({ ...prev, loading: false, error: authError }));
+      return { user: null, error: authError };
+    }
   }, []);
 
   const handleSignOut = useCallback(async () => {

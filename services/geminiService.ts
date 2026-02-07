@@ -9,10 +9,10 @@ interface AIContext {
 }
 
 export const generateAIResponse = async (prompt: string, context?: AIContext): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey) {
-    return "Mi dispiace, ma non riesco ad accedere alla mia memoria al momento (API Key mancante).";
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  if (!apiKey || apiKey === 'PLACEHOLDER_API_KEY') {
+    return "Mi dispiace, ma non riesco ad accedere alla mia memoria al momento (API Key mancante). Configura VITE_GEMINI_API_KEY nel file .env.local.";
   }
 
   try {

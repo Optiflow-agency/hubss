@@ -48,7 +48,7 @@ BEGIN
         AND user_id = auth.uid()
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Check if user has a specific permission in a workspace
 CREATE OR REPLACE FUNCTION has_permission(ws_id UUID, permission_name TEXT)
@@ -73,7 +73,7 @@ BEGIN
 
     RETURN permission_name = ANY(role_perms);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Check if user is workspace admin or owner
 CREATE OR REPLACE FUNCTION is_workspace_admin(ws_id UUID)
@@ -86,7 +86,7 @@ BEGIN
         AND (is_admin = TRUE OR is_owner = TRUE)
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Check if user has access to a client
 CREATE OR REPLACE FUNCTION has_client_access(c_id UUID)
@@ -117,7 +117,7 @@ BEGIN
         AND (wm.is_admin = TRUE OR wm.is_owner = TRUE)
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Check if user is a board member
 CREATE OR REPLACE FUNCTION is_board_member(b_id UUID)
@@ -140,7 +140,7 @@ BEGIN
         AND (wm.is_admin = TRUE OR wm.is_owner = TRUE)
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Check if user is a channel member
 CREATE OR REPLACE FUNCTION is_channel_member(ch_id UUID)
@@ -174,7 +174,7 @@ BEGIN
 
     RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =====================
 -- WORKSPACE POLICIES
@@ -725,7 +725,7 @@ CREATE POLICY "View own notifications"
     ON notifications FOR SELECT
     USING (user_id = auth.uid());
 
--- System can create notifications (via service role)
+-- Users can create notifications for themselves; trigger functions (SECURITY DEFINER) bypass RLS
 CREATE POLICY "Create notifications"
     ON notifications FOR INSERT
     WITH CHECK (user_id = auth.uid());
@@ -816,5 +816,19 @@ CREATE POLICY "View audit logs"
     ON audit_logs FOR SELECT
     USING (is_workspace_admin(workspace_id));
 
--- System creates audit logs (handled by triggers with service role)
--- No direct insert policy for users
+-- Audit logs created by trigger (SECURITY DEFINER bypasses RLS).
+-- Admin can also insert directly.
+CREATE POLICY "Insert audit logs"
+    ON audit_logs FOR INSERT
+    WITH CHECK (
+        workspace_id IS NOT NULL
+        AND is_workspace_admin(workspace_id)
+    );
+
+-- Users can view their own audit logs
+CREATE POLICY "Users view own audit logs"
+    ON audit_logs FOR SELECT
+    USING (
+        user_id = auth.uid()
+        OR (workspace_id IS NOT NULL AND is_workspace_admin(workspace_id))
+    );

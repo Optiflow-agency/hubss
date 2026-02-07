@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase, uploadFile, getPublicUrl, getSignedUrl, deleteFile } from '../../lib/supabase';
+import { uploadFile, getPublicUrl, getSignedUrl, deleteFile } from '../../lib/supabase';
 import { useAuth } from './useAuth';
 import { useUser } from './useUser';
 

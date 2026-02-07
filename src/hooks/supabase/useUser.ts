@@ -128,10 +128,14 @@ export function useUser(): UseUserReturn {
   const updateStatus = useCallback(async (status: Profile['status']) => {
     if (!user) return;
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('profiles')
       .update({ status, last_seen: new Date().toISOString() })
       .eq('id', user.id);
+
+    if (updateError) {
+      console.error('Error updating status:', updateError);
+    }
   }, [user]);
 
   const updateAvatarConfig = useCallback(async (config: Record<string, unknown>) => {

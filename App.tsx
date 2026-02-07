@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Menu, X, ArrowRight, Home, MessageSquare, CalendarDays, Globe, CheckCircle, User, Clock } from 'lucide-react'; 
+import { Menu, X, ArrowRight, Home, MessageSquare, CalendarDays, Globe, CheckCircle, User, Clock } from 'lucide-react';
 import Sidebar from './components/Sidebar';
+import { supabase } from './src/lib/supabase';
 import Dashboard from './pages/Dashboard';
 import ProjectBoard from './pages/ProjectBoard';
 import Chat from './pages/Chat';
@@ -11,7 +12,8 @@ import ClientPortal from './pages/ClientPortal';
 import Team from './pages/Team';
 import Auth from './pages/Auth';
 import AvatarMascot from './components/AvatarMascot';
-import { Client, User as UserType, Channel, Board, Task, Message, RoleDefinition, TimeLog } from './types';
+import { useAuthContext } from './src/contexts/AuthContext';
+import { Client, User as UserType, Channel, Board, Task, Message, RoleDefinition, TimeLog, BoardColumn, ChecklistItem, Attachment } from './types';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -97,127 +99,18 @@ const colorPalettes: Record<string, Record<number, string>> = {
   }
 };
 
-// Initial Mock Data
-const initialClients: Client[] = [
-    { id: 'c1', name: 'Mario Rossi', company: 'Acme Corp', avatar: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150&h=150&fit=crop', project: 'Mobile App Redesign', status: 'active', lastAccess: '2 ore fa', owner: 'Utente Ospite' },
-    { id: 'c2', name: 'Giulia Bianchi', company: 'LogiTech', avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop', project: 'E-commerce Platform', status: 'active', lastAccess: '1 giorno fa', owner: 'Giulia V.' },
-];
-
-// Placeholder team - will be updated upon login
-// Admin (ID 1) uses Avatar for Mascot feature. Others use real Photos.
-const defaultTeam: UserType[] = [
-  { id: '1', name: 'Utente Ospite', role: 'Admin', status: 'online', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix', accessibleClients: ['c1', 'c2'], email: 'guest@hubss.com' },
-  { id: '2', name: 'Giulia V.', role: 'Designer', status: 'busy', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop', accessibleClients: ['c1'], email: 'giulia@hubss.com' },
-  { id: '3', name: 'Marco R.', role: 'Developer', status: 'offline', avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150&h=150&fit=crop', accessibleClients: ['c2'], email: 'marco@hubss.com' },
-  { id: '4', name: 'Cody Fisher', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&h=150&fit=crop', accessibleClients: [], role: 'Marketing' },
-  { id: '5', name: 'Jane Cooper', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&h=150&fit=crop', accessibleClients: [], role: 'Copywriter' },
-];
-
-const initialRoles: RoleDefinition[] = [
-    { 
-        id: 'admin', 
-        name: 'Admin', 
-        description: 'Accesso completo a tutte le funzionalità dell\'agenzia.', 
-        isSystem: true, 
-        permissions: ['all'] 
-    },
-    { 
-        id: 'media_buyer', 
-        name: 'Media Buyer', 
-        description: 'Gestione campagne pubblicitarie e reportistica.', 
-        permissions: ['view_dashboard', 'manage_projects', 'view_clients'] 
-    },
-    { 
-        id: 'dev', 
-        name: 'Developer', 
-        description: 'Sviluppo tecnico, accesso ai board e task di sviluppo.', 
-        permissions: ['view_dashboard', 'manage_projects', 'edit_tasks'] 
-    },
-    { 
-        id: 'copywriter', 
-        name: 'Copywriter', 
-        description: 'Creazione contenuti testuali.', 
-        permissions: ['view_dashboard', 'view_projects', 'edit_tasks', 'view_files'] 
-    }
-];
-
-// Need to update tasks/boards assignees to match dynamic user ID if needed, 
-// but for mock purposes we'll keep ID '1' as the "main user" in data until backend.
-const initialBoards: Board[] = [
-    {
-        id: 'b1',
-        title: 'Alexa AI Development',
-        description: 'Gestione sprint e backlog sviluppo.',
-        client: 'Acme Corp',
-        members: [defaultTeam[0], defaultTeam[1]], 
-        columns: [
-            { id: 'todo', title: 'Da Fare' },
-            { id: 'progress', title: 'In Corso' },
-            { id: 'review', title: 'Revisione' },
-            { id: 'done', title: 'Fatto' }
-        ],
-        tasks: [
-            {
-                id: 't1', title: 'Pianificare il lancio', description: 'Coordinare le attività con il team marketing.', status: 'todo', priority: 'Low', assignees: [defaultTeam[0]], dueDate: '2025-11-04', comments: 2, tags: ['Marketing'],
-                checklist: [{ id: 'c1', text: 'Meeting iniziale', completed: true }], attachments: [], cover: '#4f46e5'
-            },
-            { id: 't2', title: 'Sviluppo strategia', status: 'progress', priority: 'Medium', assignees: [defaultTeam[1]], dueDate: '2025-02-10', comments: 5, tags: ['Feature'] },
-            { id: 't5', title: 'Setup API Backend', status: 'done', priority: 'Critical', assignees: [defaultTeam[0], defaultTeam[1]], dueDate: '2025-10-30', comments: 8, tags: ['Feature'] },
-        ]
-    },
-    {
-        id: 'b2',
-        title: 'Campagna Marketing Q3',
-        description: 'Materiali social e adv.',
-        client: 'LogiTech',
-        members: [defaultTeam[0], defaultTeam[2], defaultTeam[4]],
-        columns: [
-            { id: 'ideas', title: 'Idee' },
-            { id: 'copy', title: 'Copywriting' },
-            { id: 'graphics', title: 'Grafica' },
-            { id: 'scheduled', title: 'Programmati' }
-        ],
-        tasks: [
-             { id: 'm1', title: 'Post Instagram Lancio', status: 'graphics', priority: 'High', assignees: [defaultTeam[2]], dueDate: '2025-09-01', comments: 1, tags: ['Design'], cover: '#ef4444' },
-             { id: 'm2', title: 'Blog Post SEO', status: 'copy', priority: 'Medium', assignees: [defaultTeam[0]], dueDate: '2025-08-20', comments: 0, tags: ['Copy'] }
-        ]
-    }
-];
-
-const initialChannels: Channel[] = [
-  { id: 'ai', name: 'Hubss AI', type: 'ai', status: 'online', lastMessage: 'Come posso aiutarti?', category: 'Assistente' },
-  { id: 'gen', name: 'generale', type: 'channel', category: 'Workspace', lastMessage: 'Benvenuti!' },
-  { id: 'ann', name: 'annunci', type: 'channel', category: 'Workspace', lastMessage: 'Meeting alle 15:00' },
-  { id: 'c1_official', name: 'canale-ufficiale', type: 'channel', category: 'Acme Corp', lastMessage: 'Nuovi mockups caricati.' }, 
-  { id: 'c1_gen', name: 'generale', type: 'channel', category: 'Acme Corp', lastMessage: 'Update richiesto' },
-  { id: 'c1_des', name: 'design', type: 'channel', category: 'Acme Corp', lastMessage: 'Nuovi mockup' },
-  { id: 'c2_official', name: 'canale-ufficiale', type: 'channel', category: 'LogiTech', unread: 2, lastMessage: 'Grazie Alessandro!' }, 
-  { id: 'c2_gen', name: 'generale', type: 'channel', category: 'LogiTech' },
-  { id: 'dm1', name: 'Maria Rossi', type: 'dm', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop', status: 'online', category: 'Messaggi Diretti' },
-];
-
-const initialMessagesData: Record<string, Message[]> = {
-  'ai': [
-    { id: '1', senderId: 'ai', content: "Ciao! Sono Hubss AI. Posso aiutarti a gestire i tuoi progetti, analizzare i dati o creare nuovi task. Chiedimi pure!", timestamp: '10:00', isAi: true },
-  ],
-  'gen': [
-    { id: 'g1', senderId: '1', content: "Benvenuti nel workspace generale! Qui coordiniamo tutte le attività.", timestamp: '09:00', reactions: [{ emoji: '👋', userId: '2', count: 1 }], pinned: true },
-    { id: 'g2', senderId: '2', content: "Grazie Alessandro! Ho caricato i nuovi asset.", timestamp: '09:15' },
-  ],
-  'c1_official': [
-      { id: 'm1', senderId: '1', content: "Buongiorno! Abbiamo caricato i nuovi mockups nella sezione File.", timestamp: '10:30', pinned: true },
-  ],
-  'c2_official': [
-      { id: 'm1', senderId: '1', content: "Buongiorno Giulia! Abbiamo caricato i nuovi mockups nella sezione File. Facci sapere cosa ne pensi.", timestamp: '10:30' },
-      { id: 'm2', senderId: 'client_c2', content: "Grazie Alessandro, gli do un'occhiata subito!", timestamp: '10:35' }
-  ]
-};
-
-// Initial Mock Time Logs
-const initialTimeLogs: TimeLog[] = [
-    { id: 'tl1', userId: '1', taskId: 't1', startTime: Date.now() - 3600000 * 2, endTime: Date.now() - 3600000, duration: 3600000, description: 'Briefing iniziale', isManual: false },
-    { id: 'tl2', userId: '2', taskId: 't1', startTime: Date.now() - 3600000 * 1.5, endTime: Date.now() - 3600000 * 0.5, duration: 3600000, description: 'Mockup bozza', isManual: false },
-];
+// Helper: format ISO date to Italian relative time
+function formatRelativeTime(isoDate: string): string {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffMins < 1) return 'Adesso';
+  if (diffMins < 60) return `${diffMins} min fa`;
+  if (diffHours < 24) return `${diffHours} ore fa`;
+  if (diffDays < 7) return `${diffDays} giorni fa`;
+  return new Date(isoDate).toLocaleDateString('it-IT');
+}
 
 // --- CONFETTI COMPONENT ---
 const Confetti: React.FC = () => {
@@ -443,6 +336,9 @@ const OnboardingTour: React.FC<{ onComplete: () => void, onChangeStep: (step: nu
 };
 
 const App: React.FC = () => {
+  // CONSUME AUTH CONTEXT (session persistence)
+  const { user: authUser, profile: authProfile, workspace: authWorkspace, loading: authLoading } = useAuthContext();
+
   // AUTH STATE
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeView, setActiveView] = useState('dashboard');
@@ -458,34 +354,326 @@ const App: React.FC = () => {
   const [showMascot, setShowMascot] = useState(true);
 
   // Workspace Info
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState('Hubss Workspace');
   const [workspaceLogo, setWorkspaceLogo] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [dataLoading, setDataLoading] = useState(false);
 
-  // Shared State
-  const [clients, setClients] = useState<Client[]>(initialClients);
-  const [teamMembers, setTeamMembers] = useState<UserType[]>(defaultTeam);
-  const [channels, setChannels] = useState<Channel[]>(initialChannels);
-  const [boards, setBoards] = useState<Board[]>(initialBoards);
-  
-  // ROLE & AGENCY STATE (NEW)
-  const [roles, setRoles] = useState<RoleDefinition[]>(initialRoles);
-  
+  // Shared State - loaded from Supabase after login
+  const [clients, setClients] = useState<Client[]>([]);
+  const [teamMembers, setTeamMembers] = useState<UserType[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [boards, setBoards] = useState<Board[]>([]);
+
+  // ROLE & AGENCY STATE
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
+
   // Shared Message State
-  const [allMessages, setAllMessages] = useState<Record<string, Message[]>>(initialMessagesData);
+  const [allMessages, setAllMessages] = useState<Record<string, Message[]>>({});
 
-  // Derived state for current user
-  const currentUser = teamMembers[0];
+  // Derived state for current user (safe fallback before login)
+  const currentUser = teamMembers[0] || { id: '', name: '', avatar: '', accessibleClients: [] as string[] };
 
   // Derived Admin User for Mascot
-  const adminUser = teamMembers.find(u => u.role === 'Admin') || teamMembers[0];
+  const adminUser = teamMembers.find(u => u.role === 'Admin') || currentUser;
 
   // Derived stats for Mascot
   const userTasks = boards.flatMap(b => b.tasks).filter(t => t.assignees.some(u => u.id === currentUser.id));
   const completedTasksCount = userTasks.filter(t => t.status.toLowerCase().includes('done') || t.status.toLowerCase().includes('fatto')).length;
   const pendingTasksCount = userTasks.filter(t => !t.status.toLowerCase().includes('done') && !t.status.toLowerCase().includes('fatto')).length;
 
+  // --- WORKSPACE DATA LOADING FROM SUPABASE ---
+  const loadWorkspaceData = async (userId: string) => {
+    setDataLoading(true);
+    try {
+      // 1. Get user profile to find workspace_id
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (!profile?.workspace_id) {
+        setDataLoading(false);
+        return;
+      }
+
+      const wsId = profile.workspace_id;
+      setWorkspaceId(wsId);
+
+      // 2. Fetch all workspace data in parallel
+      const [
+        { data: dbProfiles },
+        { data: dbBoards },
+        { data: dbClients },
+        { data: dbChannels },
+        { data: dbRoles },
+        { data: dbTimeLogs },
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').eq('workspace_id', wsId),
+        supabase.from('boards').select('*').eq('workspace_id', wsId),
+        supabase.from('clients').select('*').eq('workspace_id', wsId),
+        supabase.from('channels').select('*').eq('workspace_id', wsId),
+        supabase.from('roles').select('*').eq('workspace_id', wsId),
+        supabase.from('time_logs').select('*').eq('user_id', userId).order('start_time', { ascending: false }),
+      ]);
+
+      // 3. Map profiles → frontend UserType
+      const profileMap = new Map<string, UserType>();
+      const mappedTeam: UserType[] = (dbProfiles || []).map(p => {
+        const u: UserType = {
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          avatar: p.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(p.name)}`,
+          avatarConfig: p.avatar_config as UserType['avatarConfig'],
+          status: p.status === 'away' ? 'offline' : (p.status as UserType['status']),
+          role: p.role || undefined,
+          accessibleClients: p.accessible_clients || [],
+        };
+        profileMap.set(p.id, u);
+        return u;
+      });
+
+      // Ensure current user is at index 0
+      const currentIdx = mappedTeam.findIndex(u => u.id === userId);
+      if (currentIdx > 0) {
+        const [cu] = mappedTeam.splice(currentIdx, 1);
+        mappedTeam.unshift(cu);
+      }
+      setTeamMembers(mappedTeam);
+
+      // 4. Map clients → frontend Client
+      const clientCompanyMap = new Map<string, string>();
+      const mappedClients: Client[] = (dbClients || []).map(c => {
+        clientCompanyMap.set(c.id, c.company);
+        return {
+          id: c.id,
+          name: c.name,
+          company: c.company,
+          avatar: c.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.company)}`,
+          project: c.project || '',
+          status: (c.status === 'archived' ? 'completed' : c.status) as Client['status'],
+          lastAccess: c.last_access ? formatRelativeTime(c.last_access) : 'Mai',
+          owner: c.owner_id ? (profileMap.get(c.owner_id)?.name || '') : '',
+        };
+      });
+      setClients(mappedClients);
+
+      // 5. Fetch tasks with assignees + attachments for workspace boards
+      const boardIds = (dbBoards || []).map(b => b.id);
+      let dbTasks: any[] = [];
+      const boardMembersMap: Record<string, string[]> = {};
+      const commentCounts: Record<string, number> = {};
+
+      if (boardIds.length > 0) {
+        const [
+          { data: tasks },
+          { data: boardMembers },
+        ] = await Promise.all([
+          supabase
+            .from('tasks')
+            .select('*, task_assignees(user_id), task_attachments(*)')
+            .in('board_id', boardIds)
+            .order('position', { ascending: true }),
+          supabase
+            .from('board_members')
+            .select('board_id, user_id')
+            .in('board_id', boardIds),
+        ]);
+
+        dbTasks = tasks || [];
+        (boardMembers || []).forEach(bm => {
+          if (!boardMembersMap[bm.board_id]) boardMembersMap[bm.board_id] = [];
+          boardMembersMap[bm.board_id].push(bm.user_id);
+        });
+
+        // Fetch comment counts
+        const taskIds = dbTasks.map((t: any) => t.id);
+        if (taskIds.length > 0) {
+          const { data: comments } = await supabase
+            .from('task_comments')
+            .select('task_id')
+            .in('task_id', taskIds);
+          (comments || []).forEach(c => {
+            commentCounts[c.task_id] = (commentCounts[c.task_id] || 0) + 1;
+          });
+        }
+      }
+
+      // Group tasks by board and map to frontend Task type
+      const tasksByBoard: Record<string, Task[]> = {};
+      dbTasks.forEach((t: any) => {
+        const assigneeIds: string[] = (t.task_assignees || []).map((a: any) => a.user_id);
+        const assignees = assigneeIds.map((id: string) => profileMap.get(id)).filter(Boolean) as UserType[];
+        const attachments: Attachment[] = (t.task_attachments || []).map((a: any) => ({
+          id: a.id, name: a.name, url: a.url, type: a.type,
+        }));
+
+        const task: Task = {
+          id: t.id,
+          title: t.title,
+          description: t.description || undefined,
+          status: t.status,
+          priority: t.priority,
+          assignees,
+          dueDate: t.due_date || '',
+          comments: commentCounts[t.id] || 0,
+          tags: t.tags || [],
+          checklist: (t.checklist as ChecklistItem[]) || undefined,
+          cover: t.cover || undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
+          clientVisible: t.client_visible,
+          effort: t.effort || undefined,
+          actualEffort: t.actual_effort || undefined,
+          isBlocked: t.is_blocked,
+          reworkCount: t.rework_count,
+          completedAt: t.completed_at || undefined,
+          totalTimeSpent: t.total_time_spent,
+        };
+        if (!tasksByBoard[t.board_id]) tasksByBoard[t.board_id] = [];
+        tasksByBoard[t.board_id].push(task);
+      });
+
+      // 6. Map boards → frontend Board
+      const mappedBoards: Board[] = (dbBoards || []).map(b => {
+        const memberIds = boardMembersMap[b.id] || [];
+        const members = memberIds.map(id => profileMap.get(id)).filter(Boolean) as UserType[];
+        return {
+          id: b.id,
+          title: b.title,
+          description: b.description || '',
+          client: b.client_id ? (clientCompanyMap.get(b.client_id) || '') : undefined,
+          columns: (b.columns as BoardColumn[]) || [],
+          tasks: tasksByBoard[b.id] || [],
+          members,
+        };
+      });
+      setBoards(mappedBoards);
+
+      // 7. Map channels + fetch messages
+      const aiChannel: Channel = {
+        id: 'ai', name: 'Hubss AI', type: 'ai', status: 'online',
+        lastMessage: 'Come posso aiutarti?', category: 'Assistente',
+      };
+      const channelIds = (dbChannels || []).map(c => c.id);
+      const messagesMap: Record<string, Message[]> = {
+        ai: [{ id: '1', senderId: 'ai', content: 'Ciao! Sono Hubss AI. Posso aiutarti a gestire i tuoi progetti, analizzare i dati o creare nuovi task. Chiedimi pure!', timestamp: '10:00', isAi: true }],
+      };
+
+      if (channelIds.length > 0) {
+        const { data: dbMessages } = await supabase
+          .from('messages')
+          .select('*')
+          .in('channel_id', channelIds)
+          .order('created_at', { ascending: true })
+          .limit(500);
+
+        (dbMessages || []).forEach(m => {
+          const msg: Message = {
+            id: m.id,
+            senderId: m.sender_id || 'system',
+            content: m.content,
+            timestamp: new Date(m.created_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+            isAi: m.is_ai,
+            threadId: m.thread_id || undefined,
+            replyCount: m.reply_count,
+            reactions: (m.reactions as Message['reactions']) || undefined,
+            pinned: m.pinned,
+          };
+          if (!messagesMap[m.channel_id]) messagesMap[m.channel_id] = [];
+          messagesMap[m.channel_id].push(msg);
+        });
+      }
+
+      // Build channel list with lastMessage
+      const mappedChannels: Channel[] = [
+        aiChannel,
+        ...(dbChannels || []).map(c => {
+          const msgs = messagesMap[c.id];
+          const lastMsg = msgs && msgs.length > 0 ? msgs[msgs.length - 1].content : undefined;
+          return {
+            id: c.id,
+            name: c.name,
+            type: c.type,
+            category: c.category || undefined,
+            avatar: c.avatar || undefined,
+            lastMessage: lastMsg ? (lastMsg.length > 50 ? lastMsg.substring(0, 50) + '...' : lastMsg) : undefined,
+          };
+        }),
+      ];
+      setChannels(mappedChannels);
+      setAllMessages(messagesMap);
+
+      // 8. Map time logs → frontend TimeLog
+      const mappedTimeLogs: TimeLog[] = (dbTimeLogs || []).map(tl => ({
+        id: tl.id,
+        taskId: tl.task_id,
+        userId: tl.user_id,
+        startTime: new Date(tl.start_time).getTime(),
+        endTime: tl.end_time ? new Date(tl.end_time).getTime() : null,
+        duration: tl.duration,
+        description: tl.description || undefined,
+        isManual: tl.is_manual,
+      }));
+      setTimeLogs(mappedTimeLogs);
+
+      // 9. Map roles → frontend RoleDefinition
+      const mappedRoles: RoleDefinition[] = (dbRoles || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        description: r.description || '',
+        isSystem: r.is_system,
+        permissions: r.permissions || [],
+      }));
+      setRoles(mappedRoles);
+
+    } catch (err) {
+      console.error('Error loading workspace data:', err);
+    }
+    setDataLoading(false);
+  };
+
+  // Trigger data loading after authentication
+  useEffect(() => {
+    if (isAuthenticated && currentUserId) {
+      loadWorkspaceData(currentUserId);
+    }
+  }, [isAuthenticated, currentUserId]);
+
+  // Session restore: if AuthContext has a session but App is not authenticated, auto-login
+  useEffect(() => {
+    if (authLoading || isAuthenticated) return;
+
+    if (authUser && authProfile) {
+      // Build frontend UserType from existing profile
+      const restoredUser: UserType = {
+        id: authProfile.id,
+        name: authProfile.name,
+        email: authProfile.email,
+        avatar: authProfile.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authProfile.name)}`,
+        avatarConfig: authProfile.avatar_config as UserType['avatarConfig'],
+        status: authProfile.status === 'away' ? 'offline' : (authProfile.status as UserType['status']),
+        role: authProfile.role || undefined,
+        accessibleClients: authProfile.accessible_clients || [],
+      };
+
+      setTeamMembers([restoredUser]);
+
+      if (authWorkspace) {
+        setWorkspaceName(authWorkspace.name);
+        setWorkspaceLogo(authWorkspace.logo_url || '');
+      }
+
+      setCurrentUserId(authUser.id);
+      setIsAuthenticated(true);
+      // loadWorkspaceData will be triggered by the effect above
+    }
+  }, [authUser, authProfile, authWorkspace, authLoading, isAuthenticated]);
+
   // --- TIME TRACKING STATE ---
-  const [timeLogs, setTimeLogs] = useState<TimeLog[]>(initialTimeLogs);
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
   
   // Logic: Ensure only one active timer per user. We track the active session here.
   // We can derive "isActive" state for UI by checking if a log has endTime: null
@@ -498,32 +686,49 @@ const App: React.FC = () => {
       }
 
       // 2. Create new log
+      const now = Date.now();
       const newLog: TimeLog = {
-          id: `tl_${Date.now()}`,
+          id: `tl_${now}`,
           userId: currentUser.id,
           taskId: taskId,
-          startTime: Date.now(),
+          startTime: now,
           endTime: null,
           duration: 0,
           isManual: false
       };
-      
       setTimeLogs(prev => [...prev, newLog]);
+
+      // Persist to Supabase
+      supabase.from('time_logs').insert({
+        task_id: taskId,
+        user_id: currentUser.id,
+        start_time: new Date(now).toISOString(),
+        is_manual: false,
+      }).then(({ error }) => { if (error) console.error('Error starting timer:', error); });
   };
 
   const stopTimer = (logId?: string) => {
-      // If logId provided, stop specific. Else find active one for user.
       const now = Date.now();
+      const logToStop = timeLogs.find(log =>
+          log.endTime === null && (logId ? log.id === logId : log.userId === currentUser.id)
+      );
+
       setTimeLogs(prev => prev.map(log => {
           if (log.endTime === null && (logId ? log.id === logId : log.userId === currentUser.id)) {
-              return {
-                  ...log,
-                  endTime: now,
-                  duration: now - log.startTime
-              };
+              return { ...log, endTime: now, duration: now - log.startTime };
           }
           return log;
       }));
+
+      // Persist to Supabase
+      if (logToStop) {
+        const duration = now - logToStop.startTime;
+        supabase.from('time_logs').update({
+          end_time: new Date(now).toISOString(),
+          duration,
+        }).eq('id', logToStop.id)
+          .then(({ error }) => { if (error) console.error('Error stopping timer:', error); });
+      }
   };
 
   const logManualTime = (taskId: string, startTime: number, endTime: number, description: string) => {
@@ -538,14 +743,40 @@ const App: React.FC = () => {
           isManual: true
       };
       setTimeLogs(prev => [...prev, newLog]);
+
+      // Persist to Supabase
+      supabase.from('time_logs').insert({
+        task_id: taskId,
+        user_id: currentUser.id,
+        start_time: new Date(startTime).toISOString(),
+        end_time: new Date(endTime).toISOString(),
+        duration: endTime - startTime,
+        description,
+        is_manual: true,
+      }).then(({ error }) => { if (error) console.error('Error logging manual time:', error); });
   };
 
   const updateTimeLog = (logId: string, updates: Partial<TimeLog>) => {
       setTimeLogs(prev => prev.map(log => log.id === logId ? { ...log, ...updates } : log));
+
+      // Persist to Supabase
+      const dbUpdates: Record<string, any> = {};
+      if (updates.startTime !== undefined) dbUpdates.start_time = new Date(updates.startTime).toISOString();
+      if (updates.endTime !== undefined) dbUpdates.end_time = updates.endTime ? new Date(updates.endTime).toISOString() : null;
+      if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (Object.keys(dbUpdates).length > 0) {
+        supabase.from('time_logs').update(dbUpdates).eq('id', logId)
+          .then(({ error }) => { if (error) console.error('Error updating time log:', error); });
+      }
   };
 
   const deleteTimeLog = (logId: string) => {
       setTimeLogs(prev => prev.filter(log => log.id !== logId));
+
+      // Persist to Supabase
+      supabase.from('time_logs').delete().eq('id', logId)
+        .then(({ error }) => { if (error) console.error('Error deleting time log:', error); });
   };
 
   // --- END TIME TRACKING ---
@@ -587,73 +818,91 @@ const App: React.FC = () => {
           content: messageContent,
           timestamp: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
           isAi,
-          threadId: parentId // Link to parent if it's a reply
+          threadId: parentId
       };
-      
+
+      // Optimistic local update
       setAllMessages(prev => {
           const currentMessages = prev[channelId] || [];
-          
-          // If replying to a thread, update parent's replyCount
           let updatedMessages = [...currentMessages, newMessage];
           if (parentId) {
-              updatedMessages = updatedMessages.map(msg => 
-                  msg.id === parentId 
+              updatedMessages = updatedMessages.map(msg =>
+                  msg.id === parentId
                   ? { ...msg, replyCount: (msg.replyCount || 0) + 1 }
                   : msg
               );
           }
-
-          return {
-              ...prev,
-              [channelId]: updatedMessages
-          };
+          return { ...prev, [channelId]: updatedMessages };
       });
 
-      // Update channel last message only if main chat (not thread reply)
       if (!parentId) {
-          setChannels(prev => prev.map(c => 
-              c.id === channelId 
-              ? { ...c, lastMessage: isAi ? 'AI Response' : (messageContent.includes('<') ? 'Allegato/Formattato' : messageContent) } 
+          setChannels(prev => prev.map(c =>
+              c.id === channelId
+              ? { ...c, lastMessage: isAi ? 'AI Response' : (messageContent.includes('<') ? 'Allegato/Formattato' : messageContent) }
               : c
           ));
+      }
+
+      // Persist to Supabase (skip AI channel)
+      if (channelId !== 'ai') {
+        supabase.from('messages').insert({
+          channel_id: channelId,
+          sender_id: senderId,
+          content: messageContent,
+          is_ai: isAi,
+          thread_id: parentId || null,
+        }).then(({ error }) => {
+          if (error) console.error('Error saving message:', error);
+        });
       }
   };
 
   const handleAddReaction = (channelId: string, messageId: string, emoji: string) => {
-      setAllMessages(prev => {
-          const msgs = prev[channelId] || [];
-          const updatedMsgs = msgs.map(msg => {
-              if (msg.id !== messageId) return msg;
-              
-              const existingReactions = msg.reactions || [];
-              const existingReaction = existingReactions.find(r => r.emoji === emoji);
-              
-              let newReactions;
-              if (existingReaction) {
-                  // Currently simple toggle logic: if user clicked, assume increment for demo
-                  // In real app, we check if userId already reacted
-                  newReactions = existingReactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1 } : r);
-              } else {
-                  newReactions = [...existingReactions, { emoji, userId: currentUser.id, count: 1 }];
-              }
-              
-              return { ...msg, reactions: newReactions };
-          });
-          return { ...prev, [channelId]: updatedMsgs };
-      });
+      // Compute new reactions
+      const msgs = allMessages[channelId] || [];
+      const msg = msgs.find(m => m.id === messageId);
+      if (!msg) return;
+
+      const existingReactions = msg.reactions || [];
+      const existingReaction = existingReactions.find(r => r.emoji === emoji);
+
+      let newReactions;
+      if (existingReaction) {
+          newReactions = existingReactions.map(r => r.emoji === emoji ? { ...r, count: r.count + 1 } : r);
+      } else {
+          newReactions = [...existingReactions, { emoji, userId: currentUser.id, count: 1 }];
+      }
+
+      // Optimistic local update
+      setAllMessages(prev => ({
+          ...prev,
+          [channelId]: (prev[channelId] || []).map(m => m.id === messageId ? { ...m, reactions: newReactions } : m)
+      }));
+
+      // Persist to Supabase
+      supabase.from('messages').update({ reactions: newReactions }).eq('id', messageId)
+        .then(({ error }) => { if (error) console.error('Error updating reactions:', error); });
   };
 
   const handleTogglePin = (channelId: string, messageId: string) => {
-      setAllMessages(prev => {
-          const msgs = prev[channelId] || [];
-          const updatedMsgs = msgs.map(msg => 
-              msg.id === messageId ? { ...msg, pinned: !msg.pinned } : msg
-          );
-          return { ...prev, [channelId]: updatedMsgs };
-      });
+      const msgs = allMessages[channelId] || [];
+      const msg = msgs.find(m => m.id === messageId);
+      const newPinned = msg ? !msg.pinned : false;
+
+      setAllMessages(prev => ({
+          ...prev,
+          [channelId]: (prev[channelId] || []).map(m =>
+              m.id === messageId ? { ...m, pinned: newPinned } : m
+          )
+      }));
+
+      // Persist to Supabase
+      supabase.from('messages').update({ pinned: newPinned }).eq('id', messageId)
+        .then(({ error }) => { if (error) console.error('Error toggling pin:', error); });
   };
 
   const handleAddClient = (newClient: Client) => {
+    // Optimistic local update
     setClients([...clients, newClient]);
     const newClientChannels: Channel[] = [
       { id: `${newClient.id}_official`, name: 'canale-ufficiale', type: 'channel', category: newClient.company, lastMessage: 'Benvenuto nel canale ufficiale.' },
@@ -662,37 +911,120 @@ const App: React.FC = () => {
       { id: `${newClient.id}_des`, name: 'design', type: 'channel', category: newClient.company },
     ];
     setChannels(prev => [...prev, ...newClientChannels]);
-    
     setAllMessages(prev => ({
         ...prev,
         [`${newClient.id}_official`]: [{ id: 'init', senderId: 'system', content: 'Canale ufficiale creato.', timestamp: 'Adesso' }]
     }));
+
+    // Persist to Supabase
+    if (workspaceId) {
+      supabase.from('clients').insert({
+        workspace_id: workspaceId,
+        name: newClient.name,
+        company: newClient.company,
+        avatar: newClient.avatar || null,
+        project: newClient.project || null,
+        status: newClient.status,
+        owner_id: currentUserId,
+      }).select().single().then(({ data, error }) => {
+        if (error) { console.error('Error creating client:', error); return; }
+        if (!data || !workspaceId) return;
+        // Create default channels for the new client
+        const channelNames = ['canale-ufficiale', 'generale', 'sviluppo', 'design'];
+        Promise.all(channelNames.map(name =>
+          supabase.from('channels').insert({
+            workspace_id: workspaceId!,
+            name,
+            type: 'channel' as const,
+            category: newClient.company,
+            client_id: data.id,
+          })
+        )).catch(err => console.error('Error creating client channels:', err));
+      });
+    }
   };
 
   const handleUpdateClient = (updatedClient: Client) => {
+      // Optimistic local update
       setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+
+      // Persist to Supabase
+      supabase.from('clients').update({
+        name: updatedClient.name,
+        company: updatedClient.company,
+        avatar: updatedClient.avatar || null,
+        project: updatedClient.project || null,
+        status: updatedClient.status,
+      }).eq('id', updatedClient.id)
+        .then(({ error }) => { if (error) console.error('Error updating client:', error); });
   };
 
   const handleAddTask = (boardId: string, task: Task) => {
+      // Optimistic local update
       setBoards(prevBoards => prevBoards.map(b => {
           if (b.id === boardId) {
               return { ...b, tasks: [...b.tasks, task] };
           }
           return b;
       }));
+
+      // Persist to Supabase
+      supabase.from('tasks').insert({
+        board_id: boardId,
+        title: task.title,
+        description: task.description || null,
+        status: task.status,
+        priority: task.priority,
+        due_date: task.dueDate || null,
+        tags: task.tags || [],
+        checklist: (task.checklist || []) as any,
+        cover: task.cover || null,
+        client_visible: task.clientVisible || false,
+        effort: task.effort || null,
+        position: 0,
+        created_by: currentUserId,
+      }).select().single().then(({ data, error }) => {
+        if (error) { console.error('Error creating task:', error); return; }
+        // Add assignees if any
+        if (data && task.assignees.length > 0) {
+          Promise.all(task.assignees.map(a =>
+            supabase.from('task_assignees').insert({ task_id: data.id, user_id: a.id })
+          )).catch(err => console.error('Error assigning task:', err));
+        }
+      });
   };
 
   const handleAddBoard = (newBoard: Board) => {
+      // Optimistic local update
       setBoards([...boards, newBoard]);
+
+      // Persist to Supabase
+      if (workspaceId) {
+        supabase.from('boards').insert({
+          workspace_id: workspaceId,
+          title: newBoard.title,
+          description: newBoard.description || null,
+          columns: (newBoard.columns || []) as any,
+          created_by: currentUserId,
+        }).select().single().then(({ data, error }) => {
+          if (error) { console.error('Error creating board:', error); return; }
+          // Add board members
+          if (data && newBoard.members.length > 0) {
+            Promise.all(newBoard.members.map(m =>
+              supabase.from('board_members').insert({ board_id: data.id, user_id: m.id })
+            )).catch(err => console.error('Error adding board members:', err));
+          }
+        });
+      }
   };
 
   const handleLogin = (user: UserType, initialBoard?: Board, workspaceInfo?: { name: string, logo: string }, initialClient?: Client, isNewUser: boolean = false) => {
-      const newTeam = [...teamMembers];
-      newTeam[0] = user;
-      setTeamMembers(newTeam);
-      
+      // Set initial user in team (will be overwritten by loadWorkspaceData)
+      setTeamMembers([user]);
+
+      // Set initial board/client for immediate UI feedback (new users)
       if (initialBoard) {
-          setBoards([initialBoard, ...boards]);
+          setBoards(prev => [initialBoard, ...prev]);
       }
 
       if (workspaceInfo) {
@@ -702,20 +1034,10 @@ const App: React.FC = () => {
 
       if (initialClient) {
           setClients(prev => [...prev, initialClient]);
-          const newClientChannels: Channel[] = [
-            { id: `${initialClient.id}_official`, name: 'canale-ufficiale', type: 'channel', category: initialClient.company, lastMessage: 'Progetto iniziato' },
-            { id: `${initialClient.id}_gen`, name: 'generale', type: 'channel', category: initialClient.company },
-            { id: `${initialClient.id}_dev`, name: 'sviluppo', type: 'channel', category: initialClient.company },
-            { id: `${initialClient.id}_des`, name: 'design', type: 'channel', category: initialClient.company },
-          ];
-          setChannels(prev => [...prev, ...newClientChannels]);
-          
-          setAllMessages(prev => ({
-            ...prev,
-            [`${initialClient.id}_official`]: [{ id: 'init', senderId: 'system', content: 'Progetto Iniziato. Canale Ufficiale Attivo.', timestamp: 'Adesso' }]
-          }));
       }
 
+      // Trigger authentication + data loading
+      setCurrentUserId(user.id);
       setIsAuthenticated(true);
       if (isNewUser) {
           setIsNewUser(true);
@@ -723,10 +1045,20 @@ const App: React.FC = () => {
       }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+      await supabase.auth.signOut();
       setIsAuthenticated(false);
+      setCurrentUserId(null);
+      setWorkspaceId(null);
       setShowTour(false);
       setIsNewUser(false);
+      setTeamMembers([]);
+      setClients([]);
+      setBoards([]);
+      setChannels([]);
+      setAllMessages({});
+      setTimeLogs([]);
+      setRoles([]);
   };
 
   const handleTourStepChange = (step: number) => {
@@ -737,6 +1069,23 @@ const App: React.FC = () => {
           setActiveView(targetPages[step]);
       }
   };
+
+  if (authLoading) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-[#f3f4f6] dark:bg-slate-950">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+        </div>
+      );
+  }
+
+  if (dataLoading) {
+      return (
+        <div className="flex h-screen flex-col items-center justify-center bg-[#f3f4f6] dark:bg-slate-950 gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Caricamento workspace...</p>
+        </div>
+      );
+  }
 
   if (!isAuthenticated) {
       return <Auth onLogin={handleLogin} />;

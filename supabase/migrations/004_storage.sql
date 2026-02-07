@@ -251,4 +251,4 @@ BEGIN
     -- This function exists for documentation purposes
     RETURN NULL;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, storage;

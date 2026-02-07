@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  ArrowRight, Check, User as UserIcon, 
+import {
+  ArrowRight, Check, User as UserIcon,
   Mail, Lock, Image as ImageIcon,
   Briefcase, Smile, Shirt, Scissors,
   Glasses, ArrowLeft, AlertCircle, RefreshCw,
@@ -9,15 +9,16 @@ import {
   ChevronDown, MoreHorizontal
 } from 'lucide-react';
 import { User, Board, Client, AvatarConfig } from '../types';
-import { 
-    AVATAR_CONSTANTS, 
-    DEFAULT_AVATAR_CONFIG, 
-    generateAvatarUrl, 
-    getAssetsForGender, 
-    getDisplayName, 
-    getSafeAvatarConfig 
+import {
+    AVATAR_CONSTANTS,
+    DEFAULT_AVATAR_CONFIG,
+    generateAvatarUrl,
+    getAssetsForGender,
+    getDisplayName,
+    getSafeAvatarConfig
 } from '../utils/avatarConfig';
 import Logo from '../components/Logo';
+import { supabase } from '../src/lib/supabase';
 
 interface AuthProps {
   onLogin: (user: User, initialBoard?: Board, workspaceInfo?: { name: string, logo: string }, initialClient?: Client, isNewUser?: boolean) => void;
@@ -30,7 +31,8 @@ type AuthView = 'login' | 'register_step_1' | 'onboarding_workspace' | 'onboardi
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [view, setView] = useState<AuthView>('login');
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [authError, setAuthError] = useState<string | null>(null);
+
   // --- USER DATA STATE ---
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -113,24 +115,110 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       setAvatarConfig(getSafeAvatarConfig(newConfig));
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    setTimeout(() => {
-      const mockConfig = getSafeAvatarConfig({ seed: 'Felix', top: 'shortFlat' });
-      const mockUser: User = {
-        id: 'u1', name: 'Alessandro M.', email: email,
-        avatar: generateAvatarUrl(mockConfig),
-        avatarConfig: mockConfig,
-        role: 'Admin', status: 'online', accessibleClients: []
+    setAuthError(null);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        setAuthError(error.message === 'Invalid login credentials'
+          ? 'Email o password non corretti.'
+          : error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!data?.user) {
+        setAuthError('Errore durante il login. Riprova.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch profile from Supabase
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      // Fetch workspace if exists
+      let wsName = 'Hubss Workspace';
+      let wsLogo = '';
+      if (profile?.workspace_id) {
+        const { data: workspace } = await supabase
+          .from('workspaces')
+          .select('*')
+          .eq('id', profile.workspace_id)
+          .single();
+        if (workspace) {
+          wsName = workspace.name;
+          wsLogo = workspace.logo_url || '';
+        }
+      }
+
+      // Build user object compatible with App.tsx frontend types
+      const avatarCfg = profile?.avatar_config
+        ? getSafeAvatarConfig(profile.avatar_config as Partial<AvatarConfig>)
+        : getSafeAvatarConfig({ seed: data.user.id });
+
+      const loggedUser: User = {
+        id: data.user.id,
+        name: profile?.name || data.user.email || 'Utente',
+        email: data.user.email,
+        avatar: profile?.avatar || generateAvatarUrl(avatarCfg),
+        avatarConfig: avatarCfg,
+        role: profile?.role || 'Admin',
+        status: 'online',
+        accessibleClients: profile?.accessible_clients || [],
       };
-      onLogin(mockUser, undefined, { name: 'Hubss Demo', logo: '' }, undefined, false);
-    }, 1500);
+
+      onLogin(loggedUser, undefined, { name: wsName, logo: wsLogo }, undefined, false);
+    } catch (err) {
+      console.error('Login error:', err);
+      setAuthError('Errore di connessione. Controlla la tua rete.');
+      setIsLoading(false);
+    }
   };
 
-  const handleRegisterStep1 = (e: React.FormEvent) => {
+  const handleRegisterStep1 = async (e: React.FormEvent) => {
     e.preventDefault();
-    setView('onboarding_workspace'); 
+    setIsLoading(true);
+    setAuthError(null);
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name: fullName },
+        },
+      });
+
+      if (error) {
+        setAuthError(error.message === 'User already registered'
+          ? 'Questa email e\' gia\' registrata. Prova ad accedere.'
+          : error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!data?.user) {
+        setAuthError('Errore durante la registrazione. Riprova.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Registration successful - move to onboarding
+      setIsLoading(false);
+      setView('onboarding_workspace');
+    } catch (err) {
+      console.error('Registration error:', err);
+      setAuthError('Errore di connessione. Controlla la tua rete.');
+      setIsLoading(false);
+    }
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -144,40 +232,163 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       }
   };
 
-  const handleOnboardingFinal = () => {
+  const handleOnboardingFinal = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      const finalConfig = getSafeAvatarConfig(avatarConfig);
-      
-      const newUser: User = {
-        id: `u_${Date.now()}`, name: fullName, email: email,
-        avatar: generateAvatarUrl(finalConfig), 
-        avatarConfig: finalConfig,
-        role: 'Admin', status: 'online', accessibleClients: []
-      };
+    setAuthError(null);
 
-      let initialClient: Client | undefined;
-      if (clientName.trim()) {
-          initialClient = {
-              id: `c_${Date.now()}`, name: 'Referente Principale', company: clientName,
-              avatar: `https://ui-avatars.com/api/?name=${clientName.replace(' ', '+')}&background=random`,
-              project: projectName, status: 'active', lastAccess: 'Mai', owner: fullName
-          };
-          newUser.accessibleClients.push(initialClient.id);
+    try {
+      // Get current authenticated user
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        setAuthError('Sessione scaduta. Riprova il login.');
+        setIsLoading(false);
+        return;
       }
 
-      const initialBoard: Board = {
-          id: `b_${Date.now()}`, title: projectName || 'Primo progetto',
+      // 1. Create workspace via RPC
+      const slug = (workspaceName || 'workspace').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const { data: workspaceId, error: wsError } = await supabase.rpc('setup_new_workspace', {
+        p_name: workspaceName || 'Workspace',
+        p_slug: slug + '-' + Date.now(),
+      });
+
+      if (wsError) {
+        console.error('Workspace creation error:', wsError);
+        setAuthError('Errore nella creazione del workspace: ' + wsError.message);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Update profile with avatar and role
+      const finalConfig = getSafeAvatarConfig(avatarConfig);
+      const finalAvatarUrl = generateAvatarUrl(finalConfig);
+
+      await supabase
+        .from('profiles')
+        .update({
+          name: fullName,
+          avatar: finalAvatarUrl,
+          avatar_config: finalConfig as any,
+          role: 'Admin',
+          status: 'online',
+        })
+        .eq('id', authUser.id);
+
+      // 3. Create board in Supabase
+      const columns = sectionTemplates[sectionType].columns.map((title, i) => ({ id: `col_${i}`, title }));
+      const { data: boardData } = await supabase
+        .from('boards')
+        .insert({
+          workspace_id: workspaceId,
+          title: projectName || 'Primo progetto',
           description: clientName ? `Progetto per ${clientName}` : `Progetto ${department}`,
-          members: [newUser], 
-          columns: sectionTemplates[sectionType].columns.map((title, i) => ({ id: `col_${i}`, title })),
-          tasks: firstTasks.filter(t => t.trim()).map((title, i) => ({
-              id: `t_${Date.now()}_${i}`, title, status: `col_0`, priority: 'Medium', assignees: [newUser], dueDate: new Date().toISOString().split('T')[0], comments: 0, tags: ['Onboarding'], attachments: []
-          }))
+          columns: columns as any,
+          created_by: authUser.id,
+        })
+        .select()
+        .single();
+
+      // 4. Create tasks in Supabase
+      if (boardData) {
+        const tasksToInsert = firstTasks.filter(t => t.trim()).map((title, i) => ({
+          board_id: boardData.id,
+          title,
+          status: 'col_0',
+          priority: 'Medium' as const,
+          position: i,
+          created_by: authUser.id,
+        }));
+
+        if (tasksToInsert.length > 0) {
+          const { data: createdTasks } = await supabase
+            .from('tasks')
+            .insert(tasksToInsert)
+            .select();
+
+          // Assign tasks to current user
+          if (createdTasks) {
+            await supabase.from('task_assignees').insert(
+              createdTasks.map(t => ({ task_id: t.id, user_id: authUser.id }))
+            );
+          }
+        }
+      }
+
+      // 5. Create client in Supabase (if provided)
+      let initialClient: Client | undefined;
+      if (clientName.trim()) {
+        const { data: clientData } = await supabase
+          .from('clients')
+          .insert({
+            workspace_id: workspaceId,
+            name: 'Referente Principale',
+            company: clientName,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(clientName)}&background=random`,
+            project: projectName,
+            status: 'active',
+            owner_id: authUser.id,
+          })
+          .select()
+          .single();
+
+        if (clientData) {
+          // Grant access
+          await supabase.from('user_client_access').insert({
+            user_id: authUser.id,
+            client_id: clientData.id,
+            granted_by: authUser.id,
+          });
+
+          initialClient = {
+            id: clientData.id,
+            name: 'Referente Principale',
+            company: clientName,
+            avatar: clientData.avatar || '',
+            project: projectName,
+            status: 'active',
+            lastAccess: 'Mai',
+            owner: fullName,
+          };
+        }
+      }
+
+      // 6. Build frontend-compatible objects for App.tsx
+      const newUser: User = {
+        id: authUser.id,
+        name: fullName,
+        email: email,
+        avatar: finalAvatarUrl,
+        avatarConfig: finalConfig,
+        role: 'Admin',
+        status: 'online',
+        accessibleClients: initialClient ? [initialClient.id] : [],
+      };
+
+      const initialBoard: Board = {
+        id: boardData?.id || `b_${Date.now()}`,
+        title: projectName || 'Primo progetto',
+        description: clientName ? `Progetto per ${clientName}` : `Progetto ${department}`,
+        members: [newUser],
+        columns: columns,
+        tasks: firstTasks.filter(t => t.trim()).map((title, i) => ({
+          id: `t_${Date.now()}_${i}`,
+          title,
+          status: 'col_0',
+          priority: 'Medium',
+          assignees: [newUser],
+          dueDate: new Date().toISOString().split('T')[0],
+          comments: 0,
+          tags: ['Onboarding'],
+          attachments: [],
+        })),
       };
 
       onLogin(newUser, initialBoard, { name: workspaceName || 'Workspace', logo: workspaceLogo }, initialClient, true);
-    }, 2000);
+    } catch (err) {
+      console.error('Onboarding error:', err);
+      setAuthError('Errore durante la configurazione. Riprova.');
+      setIsLoading(false);
+    }
   };
 
   // --- RENDER HELPERS ---
@@ -185,6 +396,23 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const handleInviteChange = (index: number, value: string) => { const n = [...teamInvites]; n[index] = value; setTeamInvites(n); };
 
   // --- RENDER SOCIAL LOGIN BUTTONS ---
+  const handleOAuthLogin = async (provider: 'google' | 'apple') => {
+    setAuthError(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        setAuthError(`Errore ${provider}: ${error.message}`);
+      }
+    } catch (err) {
+      setAuthError('Errore di connessione con il provider OAuth.');
+    }
+  };
+
   const renderSocialLogin = () => (
       <>
         <div className="relative my-6">
@@ -192,10 +420,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             <div className="relative flex justify-center text-xs uppercase font-bold"><span className="bg-white dark:bg-slate-950 px-2 text-slate-400">oppure continua con</span></div>
         </div>
         <div className="grid grid-cols-2 gap-3 mb-6">
-            <button type="button" className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 transition text-slate-700 dark:text-white font-bold text-sm">
+            <button type="button" onClick={() => handleOAuthLogin('google')} className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 transition text-slate-700 dark:text-white font-bold text-sm">
                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" /> Google
             </button>
-            <button type="button" className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 transition text-slate-700 dark:text-white font-bold text-sm">
+            <button type="button" onClick={() => handleOAuthLogin('apple')} className="flex items-center justify-center gap-2 px-4 py-3 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 transition text-slate-700 dark:text-white font-bold text-sm">
                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.74 1.18 0 2.21-.93 3.69-.93.95 0 1.93.35 2.66.89-2.3 1.3-2.07 4.24.31 5.49-.62 1.84-1.29 3.58-1.74 6.78zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg> Apple
             </button>
         </div>
@@ -499,7 +727,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   </div>
 
                   <form onSubmit={handleLogin} className="space-y-5">
-                     {/* ... (Existing login form content) ... */}
+                     {authError && (
+                       <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-300 text-sm">
+                         <AlertCircle size={16} className="shrink-0" />
+                         <span>{authError}</span>
+                       </div>
+                     )}
                      <div>
                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-2 ml-1">Email</label>
                         <div className="relative group">
@@ -545,7 +778,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   {renderSocialLogin()}
 
                   <p className="text-center text-slate-500 dark:text-slate-400 mt-8">
-                     Non hai un account? <button onClick={() => setView('register_step_1')} className="text-indigo-600 font-bold hover:underline">Registrati ora</button>
+                     Non hai un account? <button onClick={() => { setAuthError(null); setView('register_step_1'); }} className="text-indigo-600 font-bold hover:underline">Registrati ora</button>
                   </p>
                </div>
             )}
@@ -560,6 +793,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                   </div>
                   {/* ... form ... */}
                   <form onSubmit={handleRegisterStep1} className="space-y-5">
+                     {authError && (
+                       <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-300 text-sm">
+                         <AlertCircle size={16} className="shrink-0" />
+                         <span>{authError}</span>
+                       </div>
+                     )}
                      <div>
                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-2 ml-1">Nome Completo</label>
                         <div className="relative group">
@@ -582,12 +821,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                         </div>
                      </div>
 
-                     <button type="submit" className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-slate-800 dark:hover:bg-indigo-500 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
-                        Continua <ArrowRight size={18} />
+                     <button type="submit" disabled={isLoading} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-slate-800 dark:hover:bg-indigo-500 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2 disabled:opacity-50">
+                        {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <>Continua <ArrowRight size={18} /></>}
                      </button>
                   </form>
                   {renderSocialLogin()}
-                  <p className="text-center text-slate-500 dark:text-slate-400 mt-8">Hai già un account? <button onClick={() => setView('login')} className="text-indigo-600 font-bold hover:underline">Accedi</button></p>
+                  <p className="text-center text-slate-500 dark:text-slate-400 mt-8">Hai già un account? <button onClick={() => { setAuthError(null); setView('login'); }} className="text-indigo-600 font-bold hover:underline">Accedi</button></p>
                </div>
             )}
 

@@ -85,7 +85,9 @@ export function useNotifications(): UseNotificationsReturn {
       .update({ read: true, read_at: new Date().toISOString() })
       .eq('id', notificationId);
 
-    if (!updateError) {
+    if (updateError) {
+      setError(new Error(updateError.message));
+    } else {
       setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       );
@@ -101,7 +103,9 @@ export function useNotifications(): UseNotificationsReturn {
       .eq('user_id', user.id)
       .eq('read', false);
 
-    if (!updateError) {
+    if (updateError) {
+      setError(new Error(updateError.message));
+    } else {
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     }
   }, [user]);
@@ -112,7 +116,9 @@ export function useNotifications(): UseNotificationsReturn {
       .delete()
       .eq('id', notificationId);
 
-    if (!deleteError) {
+    if (deleteError) {
+      setError(new Error(deleteError.message));
+    } else {
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
     }
   }, []);
@@ -125,7 +131,9 @@ export function useNotifications(): UseNotificationsReturn {
       .delete()
       .eq('user_id', user.id);
 
-    if (!deleteError) {
+    if (deleteError) {
+      setError(new Error(deleteError.message));
+    } else {
       setNotifications([]);
     }
   }, [user]);

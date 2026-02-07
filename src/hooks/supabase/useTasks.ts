@@ -276,8 +276,8 @@ export function useTasks(boardId?: string): UseTasksReturn {
     setError(null);
 
     try {
-      // Batch update positions
-      await Promise.all(
+      // Batch update positions, checking each for errors
+      const results = await Promise.all(
         taskUpdates.map(({ id, position }) =>
           supabase
             .from('tasks')
@@ -285,6 +285,12 @@ export function useTasks(boardId?: string): UseTasksReturn {
             .eq('id', id)
         )
       );
+
+      // Check for any errors in the batch
+      const failedUpdate = results.find(r => r.error);
+      if (failedUpdate?.error) {
+        throw new Error(`Reorder failed: ${failedUpdate.error.message}`);
+      }
 
       // Update local state
       setTasks(prev =>

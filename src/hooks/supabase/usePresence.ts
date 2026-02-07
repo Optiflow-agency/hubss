@@ -29,6 +29,8 @@ export function usePresence(channelName?: string): UsePresenceReturn {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
   // Default channel is workspace presence
   const resolvedChannelName = channelName ?? `presence:${profile?.workspace_id}`;
@@ -71,14 +73,17 @@ export function usePresence(channelName?: string): UsePresenceReturn {
     // Subscribe and track own presence
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await channel.track({
-          id: user.id,
-          name: profile.name,
-          avatar: profile.avatar,
-          status: profile.status,
-          lastSeen: new Date().toISOString(),
-          typing: false,
-        });
+        const p = profileRef.current;
+        if (p) {
+          await channel.track({
+            id: user.id,
+            name: p.name,
+            avatar: p.avatar,
+            status: p.status,
+            lastSeen: new Date().toISOString(),
+            typing: false,
+          });
+        }
       }
     });
 
@@ -89,27 +94,18 @@ export function usePresence(channelName?: string): UsePresenceReturn {
 
     // Handle visibility change (tab focus)
     const handleVisibilityChange = async () => {
-      if (document.hidden) {
-        await updateStatus('away');
-        await channel.track({
-          id: user.id,
-          name: profile.name,
-          avatar: profile.avatar,
-          status: 'away',
-          lastSeen: new Date().toISOString(),
-          typing: false,
-        });
-      } else {
-        await updateStatus('online');
-        await channel.track({
-          id: user.id,
-          name: profile.name,
-          avatar: profile.avatar,
-          status: 'online',
-          lastSeen: new Date().toISOString(),
-          typing: false,
-        });
-      }
+      const p = profileRef.current;
+      if (!p) return;
+      const newStatus = document.hidden ? 'away' : 'online';
+      await updateStatus(newStatus);
+      await channel.track({
+        id: user.id,
+        name: p.name,
+        avatar: p.avatar,
+        status: newStatus,
+        lastSeen: new Date().toISOString(),
+        typing: false,
+      });
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -135,7 +131,9 @@ export function usePresence(channelName?: string): UsePresenceReturn {
 
       supabase.removeChannel(channel);
     };
-  }, [user, profile?.workspace_id, profile?.name, profile?.avatar, profile?.status, resolvedChannelName, updateStatus]);
+  // NOTE: profile?.status intentionally excluded to prevent infinite loop
+  // (updateStatus changes profile.status which would re-trigger this effect)
+  }, [user, profile?.workspace_id, resolvedChannelName]);
 
   const isUserOnline = useCallback((userId: string) => {
     return onlineUsers.some(u => u.id === userId && u.status !== 'offline');

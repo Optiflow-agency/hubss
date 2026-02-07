@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { Loader2 } from 'lucide-react';
 
@@ -6,11 +7,13 @@ import { Loader2 } from 'lucide-react';
 // This component handles the redirect back from OAuth providers (Google, Apple)
 export function AuthCallback() {
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        // Get the session from the URL hash
+        // The Supabase client with detectSessionInUrl:true will automatically
+        // exchange the PKCE code from the URL for a session
         const { data: { session }, error: authError } = await supabase.auth.getSession();
 
         if (authError) {
@@ -27,14 +30,14 @@ export function AuthCallback() {
 
           if (profile?.workspace_id) {
             // User has a workspace, redirect to dashboard
-            window.location.href = '/';
+            navigate('/', { replace: true });
           } else {
             // New user, redirect to onboarding
-            window.location.href = '/?onboarding=true';
+            navigate('/?onboarding=true', { replace: true });
           }
         } else {
           // No session, redirect to login
-          window.location.href = '/?auth=login';
+          navigate('/', { replace: true });
         }
       } catch (err) {
         console.error('Auth callback error:', err);
@@ -43,7 +46,7 @@ export function AuthCallback() {
     };
 
     handleCallback();
-  }, []);
+  }, [navigate]);
 
   if (error) {
     return (
@@ -59,7 +62,7 @@ export function AuthCallback() {
           </h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
           <button
-            onClick={() => window.location.href = '/?auth=login'}
+            onClick={() => navigate('/', { replace: true })}
             className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
             Torna al login

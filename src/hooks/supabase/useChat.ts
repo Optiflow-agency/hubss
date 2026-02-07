@@ -5,7 +5,7 @@ import { useAuth } from './useAuth';
 
 interface Reaction {
   emoji: string;
-  userId: string;
+  userIds: string[];
   count: number;
 }
 
@@ -25,7 +25,7 @@ interface UseChatReturn {
   removeReaction: (messageId: string, emoji: string) => Promise<void>;
   pinMessage: (messageId: string, pinned: boolean) => Promise<void>;
   getPinnedMessages: () => MessageWithSender[];
-  getThreadMessages: (threadId: string) => MessageWithSender[];
+  getThreadMessages: (threadId: string) => Promise<MessageWithSender[]>;
   sendAiMessage: (content: string, context?: Record<string, unknown>) => Promise<Message | null>;
   markAsRead: (messageId: string) => Promise<void>;
   loadMore: () => Promise<void>;
@@ -216,13 +216,17 @@ export function useChat(channelId?: string): UseChatReturn {
 
     let newReactions: Reaction[];
     if (existingReaction) {
-      // Increment count
+      // Check if user already reacted with this emoji
+      if (existingReaction.userIds.includes(user.id)) return;
+      // Add user to existing reaction
       newReactions = reactions.map(r =>
-        r.emoji === emoji ? { ...r, count: r.count + 1 } : r
+        r.emoji === emoji
+          ? { ...r, userIds: [...r.userIds, user.id], count: r.count + 1 }
+          : r
       );
     } else {
       // Add new reaction
-      newReactions = [...reactions, { emoji, userId: user.id, count: 1 }];
+      newReactions = [...reactions, { emoji, userIds: [user.id], count: 1 }];
     }
 
     const { error: updateError } = await supabase
@@ -236,12 +240,17 @@ export function useChat(channelId?: string): UseChatReturn {
   }, [user, messages]);
 
   const removeReaction = useCallback(async (messageId: string, emoji: string) => {
+    if (!user) return;
+
     const message = messages.find(m => m.id === messageId);
     if (!message) return;
 
     const reactions = (message.reactions as Reaction[]) || [];
     const newReactions = reactions
-      .map(r => r.emoji === emoji ? { ...r, count: r.count - 1 } : r)
+      .map(r => r.emoji === emoji
+        ? { ...r, userIds: r.userIds.filter(id => id !== user.id), count: r.count - 1 }
+        : r
+      )
       .filter(r => r.count > 0);
 
     const { error: updateError } = await supabase
@@ -252,7 +261,7 @@ export function useChat(channelId?: string): UseChatReturn {
     if (updateError) {
       setError(new Error(updateError.message));
     }
-  }, [messages]);
+  }, [user, messages]);
 
   const pinMessage = useCallback(async (messageId: string, pinned: boolean) => {
     setError(null);
@@ -271,10 +280,23 @@ export function useChat(channelId?: string): UseChatReturn {
     return messages.filter(m => m.pinned);
   }, [messages]);
 
-  const getThreadMessages = useCallback((threadId: string) => {
-    // This would need a separate query in practice
-    return messages.filter(m => m.thread_id === threadId);
-  }, [messages]);
+  const getThreadMessages = useCallback(async (threadId: string) => {
+    if (!channelId) return [];
+
+    const { data, error: fetchError } = await supabase
+      .from('messages')
+      .select(`*, sender:profiles(*)`)
+      .eq('channel_id', channelId)
+      .eq('thread_id', threadId)
+      .order('created_at', { ascending: true });
+
+    if (fetchError) {
+      console.error('Error fetching thread messages:', fetchError);
+      return [];
+    }
+
+    return (data ?? []) as MessageWithSender[];
+  }, [channelId]);
 
   const sendAiMessage = useCallback(async (
     content: string,

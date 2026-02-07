@@ -119,7 +119,7 @@ BEGIN
         ]
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =====================
 -- TRIGGER TO CREATE DEFAULT ROLES ON WORKSPACE CREATION
@@ -131,7 +131,7 @@ BEGIN
     PERFORM create_default_roles(NEW.id);
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER create_workspace_default_roles
     AFTER INSERT ON workspaces
@@ -192,7 +192,7 @@ BEGIN
         creator_id
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =====================
 -- FUNCTION TO SETUP NEW WORKSPACE COMPLETELY
@@ -232,7 +232,7 @@ BEGIN
 
     RETURN new_workspace_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- =====================
 -- REALTIME CONFIGURATION

@@ -186,7 +186,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth;
 
 -- Trigger on auth.users (requires superuser/owner)
 CREATE TRIGGER on_auth_user_created
@@ -206,7 +206,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER add_workspace_owner_trigger
     AFTER INSERT ON workspaces
@@ -226,7 +226,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER add_board_creator_trigger
     AFTER INSERT ON boards
@@ -246,7 +246,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER add_channel_creator_trigger
     AFTER INSERT ON channels
@@ -295,7 +295,7 @@ BEGIN
 
     RETURN COALESCE(NEW, OLD);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Apply audit logging to critical tables
 CREATE TRIGGER audit_boards
@@ -335,7 +335,7 @@ BEGIN
 
     RETURN notification_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Notify on task assignment
 CREATE OR REPLACE FUNCTION notify_task_assignment()
@@ -365,7 +365,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER notify_on_task_assignment
     AFTER INSERT ON task_assignees
@@ -399,7 +399,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 CREATE TRIGGER notify_on_mention
     AFTER INSERT ON messages
@@ -439,7 +439,7 @@ BEGIN
 
     RETURN ws_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Get user's running time log (if any)
 CREATE OR REPLACE FUNCTION get_running_time_log()
@@ -453,7 +453,7 @@ BEGIN
     ORDER BY start_time DESC
     LIMIT 1;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Stop all running time logs for a user
 CREATE OR REPLACE FUNCTION stop_running_time_logs()
@@ -470,7 +470,7 @@ BEGIN
     GET DIAGNOSTICS updated_count = ROW_COUNT;
     RETURN updated_count;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Get unread message count for a channel
 CREATE OR REPLACE FUNCTION get_unread_count(p_channel_id UUID)
@@ -491,4 +491,4 @@ BEGIN
 
     RETURN unread;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;

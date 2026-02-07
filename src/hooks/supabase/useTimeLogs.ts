@@ -74,8 +74,13 @@ export function useTimeLogs(taskId?: string): UseTimeLogsReturn {
     if (!user) return;
 
     const checkRunningLog = async () => {
-      const { data } = await supabase
+      const { data, error: rpcError } = await supabase
         .rpc('get_running_time_log');
+
+      if (rpcError) {
+        console.error('Error checking running time log:', rpcError);
+        return;
+      }
 
       if (data && data.length > 0) {
         setRunningLog(data[0]);
