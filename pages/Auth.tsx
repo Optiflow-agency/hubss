@@ -144,6 +144,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         .eq('id', data.user.id)
         .single();
 
+      // If no workspace_id, user never completed onboarding — redirect there
+      if (!profile?.workspace_id) {
+        setFullName(profile?.name || data.user.email || '');
+        setEmail(data.user.email || '');
+        setIsLoading(false);
+        setView('onboarding_workspace');
+        return;
+      }
+
       // Fetch workspace if exists
       let wsName = 'Hubss Workspace';
       let wsLogo = '';
@@ -271,6 +280,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           avatar_config: finalConfig as any,
           role: 'Admin',
           status: 'online',
+          workspace_id: workspaceId,
         })
         .eq('id', authUser.id);
 
@@ -382,6 +392,15 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
           attachments: [],
         })),
       };
+
+      // Send welcome email (fire-and-forget, don't block onboarding)
+      supabase.functions.invoke('send-notification-email', {
+        body: {
+          type: 'welcome',
+          userId: authUser.id,
+          data: { dashboardUrl: window.location.origin },
+        },
+      }).catch(err => console.warn('Welcome email failed:', err));
 
       onLogin(newUser, initialBoard, { name: workspaceName || 'Workspace', logo: workspaceLogo }, initialClient, true);
     } catch (err) {

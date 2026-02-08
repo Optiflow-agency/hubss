@@ -647,6 +647,12 @@ const App: React.FC = () => {
     if (authLoading || isAuthenticated) return;
 
     if (authUser && authProfile) {
+      // Don't restore session if onboarding was never completed
+      if (!authProfile.workspace_id) {
+        setLoading(false);
+        return;
+      }
+
       // Build frontend UserType from existing profile
       const restoredUser: UserType = {
         id: authProfile.id,
